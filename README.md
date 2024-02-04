@@ -1,3 +1,14 @@
+# 目录
+- [背景](#背景)
+- [最佳实践](#最佳实践)
+- [原理解析](#原理解析)
+  - [1.基类接口](#1-基类接口)
+  - [2.子类对象](#2-子类对象)
+  - [3.reflection.h](#3-reflection)
+  - [4.register.h](#4-register)
+  - [5.实现跨介质/进程的多态Wrapper类](#5-wrapper)
+  - [小结](#小结)
+- [框架的扩展行为](#框架的扩展行为)
 # 背景
 面向对象编程中的“多态”技术对于代码抽象至关重要，它是面向对象思想所衍生出的一系列设计模式（SOLID）的技术基础。  
 SOLID原则对于代码已有功能的维护和未来可能功能的扩展提供了扎实的根基，对于不断迭代发展的大型软件工程来讲，如果没有在设计开发初期就按照SOLID原则打下代码根基，那么后续的开发、维护与扩展将会演变成一场每个技术人都不愿意面对的最恐怖的噩梦。  
@@ -30,7 +41,7 @@ int main() {
   return 0;
 }
 ```
-```bash
+```shell
 ❯ g++ wrapper.cpp impl/impl_a.cpp impl/impl_b.cpp main.cpp -std=c++11
 ❯ ./a.out
 before serialize:
@@ -62,7 +73,7 @@ my age is : 12
 `-- wrapper.h #这是跨介质多态魔法的声明
 ```
 
-## 第一步，观察数据的抽象基类接口
+## 1-基类接口
 ```c++
 struct Interface {
   virtual ~Interface() {};
@@ -76,7 +87,7 @@ struct Interface {
 其次，为了能够让这个对象可以序列化和反序列化，以便跨介质/进程，还要求其子类必须要实现serialize()/deserialize()方法，不难理解这是必须的。  
 最后，在反序列化时，为了得知子类的类型，还要求必须提供子类类型的ID，即必须实现get_id()方法，这是为了在跨介质的另一侧实现**反射**以创建子类对象。
 
-## 第二步，观察子类对象ImplA
+## 2-子类对象
 ```c++
 // impl_a.h
 struct ImplA : Interface {
@@ -114,7 +125,7 @@ ImplA对象存储了一个字符串，并在打印方法和序列化方法中处
 最为关键的一行代码为：`return ReflectType2IDMap<std::decay<decltype(*this)>::type>::id;`  
 这里返回了本类型对应的ID值，而该值是从`reflection.h`中定义的模版类中获得的。  
 
-## 第三步，接下来我们观察`reflection.h`
+## 3-reflection
 ```c++
 #pragma once
 
@@ -146,7 +157,7 @@ struct ReflectType2IDMap<CLASS> {\
 在本文件中定义了`__REGISTER__`宏，其目的就是为了在特定的类型和ID之间建立静态映射关系。  
 但很显然，具体的类型和ID并不在本文件中定义，而是来自于`register.h`。
 
-## 第四步，观察`register.h`
+## 4-register
 ```c++
 // 如果需要看到数据定义的话
 #ifdef NEDD_STRUCTURE_DEFINE
@@ -167,7 +178,7 @@ struct ReflectType2IDMap<CLASS> {\
 额外的编码信息由`REGISTER`宏输入，但并没有被展开为有效的信息，而是被展开为了另一个`__REGISTER__`宏。  
 与我们在第三步观察的结果相呼应，`__REGISTER__`宏被二次展开的结果将由框架的其他部分自定义，`register.h`文件仅提供必要的信息。（尽管我是通过独立思考得到这一整套解决方案的，但后来我发现这项技术在编译器内核代码中早就被大量应用了，并有一个专门的名称，称为“X宏”技术）  
 
-## 第五步，实现跨介质/进程的多态Wrapper类
+## 5-wrapper
 > David Wheeler：“任何问题在计算机科学中都可以通过另外一个间接层来解决"。
 ```c++
 struct InterfaceWrapper {// RAII
@@ -232,7 +243,7 @@ void InterfaceWrapper::deserialize(std::istream &in) {
 3. 为了能实现运行时的id->type的映射，我们必须构建wrapper类并生成运行时反射case表。
 4. 为了简化上述两步的代码书写过程并考虑未来的可能扩展，我们采用了“X宏”技术描述了`register.h`接口文件。
 5. 为了使`InterfaceWrapper`对象具备值语义，我们并不直接包裹`Interface`对象，而是包裹`shared_ptr<Interface>`对象。
-## 最后，观察框架的扩展行为
+# 框架的扩展行为
 现在假设我们需要实现一个新的ImplB类型，而要求该类型也要支持跨介质/进程的多态，那么框架该如何为这个类型提供支持呢？
 这里我们假设`impl_b.h/cpp`已经具备完好的定义，那么接下来只需要：
 ```c++
